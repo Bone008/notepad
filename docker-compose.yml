@@ -1,0 +1,17 @@
+services:
+  notepad:
+    build: .
+    image: notepad:local
+    ports:
+      - "3000:3000"
+    environment:
+      # Devices must enter this once before they can create vaults. Joining never needs it.
+      NOTEPAD_CREATE_SECRET: ${NOTEPAD_CREATE_SECRET:?set NOTEPAD_CREATE_SECRET in .env}
+      # Set to 1 (or the number of proxy hops) when running behind a reverse proxy.
+      NOTEPAD_TRUST_PROXY: ${NOTEPAD_TRUST_PROXY:-0}
+    volumes:
+      - notepad-data:/data
+    restart: unless-stopped
+
+volumes:
+  notepad-data:

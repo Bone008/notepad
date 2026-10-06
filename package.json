@@ -1,0 +1,24 @@
+{
+  "name": "notepad",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client && npm run build -w server",
+    "start": "node server/dist/index.js",
+    "typecheck": "tsc -p shared && tsc -p server && tsc -p client && tsc -p client/tsconfig.test.json",
+    "test": "vitest run",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "concurrently": "^10.0.0",
+    "typescript": "~5.9.0",
+    "vitest": "^5.0.0"
+  }
+}
