@@ -13,15 +13,109 @@ server only ever stores ciphertext.
 
 ## Run it
 
+Two deployment paths are supported: a Docker image, or a plain Node.js process managed by pm2.
+Either way, put a TLS-terminating reverse proxy in front for anything beyond localhost: service
+workers and WebCrypto require a secure context. The proxy must allow WebSocket upgrades on `/ws`
+and keep idle HTTP connections open for at least 30 s (long-polls wait up to 25 s). Set
+`NOTEPAD_TRUST_PROXY=1` so rate limiting sees client addresses.
+
+### Option A: Docker
+
 ```bash
 cp .env.example .env            # set NOTEPAD_CREATE_SECRET
 docker compose up --build       # http://localhost:3000
 ```
 
-Put a TLS-terminating reverse proxy in front for anything beyond localhost: service workers and
-WebCrypto require a secure context. The proxy must allow WebSocket upgrades on `/ws` and keep
-idle HTTP connections open for at least 30 s (long-polls wait up to 25 s). Set
-`NOTEPAD_TRUST_PROXY=1` so rate limiting sees client addresses.
+### Option B: build locally, copy a bundle over SSH, run with pm2
+
+The server bundle is self-contained (dependencies are compiled in), so the target machine needs
+only Node.js and pm2. No `npm install` happens on the server.
+
+**On the server, once**
+
+```bash
+# Node.js 24 or newer (node:sqlite is built in) and pm2
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash - && sudo apt-get install -y nodejs
+sudo npm install -g pm2
+
+# Deploy directory: releases/ holds bundles, current -> active release, shared/ survives releases
+sudo mkdir -p /srv/notepad/releases /srv/notepad/shared/data /srv/notepad/shared/logs
+sudo chown -R "$USER" /srv/notepad
+
+# Secrets and settings live outside the releases; Node loads this file itself
+cat > /srv/notepad/shared/.env <<'ENV'
+NOTEPAD_CREATE_SECRET=replace-with-a-long-random-string
+PORT=3000
+NOTEPAD_TRUST_PROXY=1
+ENV
+chmod 600 /srv/notepad/shared/.env
+```
+
+A good secret: `node -e "console.log(require('node:crypto').randomBytes(18).toString('base64url'))"`.
+Devices need it once to create vaults; joining a vault never needs it.
+
+**On your machine, for every release**
+
+```bash
+npm run bundle                           # builds client + server, prints dist/notepad-<version>-<stamp>.tar.gz
+scp dist/notepad-0.1.0-20261006150302.tar.gz user@host:/srv/notepad/releases/
+```
+
+**On the server, for every release**
+
+```bash
+cd /srv/notepad/releases
+release=notepad-0.1.0-20261006150302                       # the file you just uploaded
+mkdir -p "$release" && tar -xzf "$release.tar.gz" -C "$release" --strip-components=1 && rm "$release.tar.gz"
+ln -sfn "/srv/notepad/releases/$release" /srv/notepad/current
+
+cd /srv/notepad/current
+NOTEPAD_HOME=/srv/notepad pm2 startOrReload ecosystem.config.cjs --update-env
+pm2 save                                                   # remember the process list across reboots
+curl -fsS http://127.0.0.1:3000/api/health                 # {"ok":true}
+```
+
+The first time, also register pm2 as a system service so Notepad comes back after a reboot:
+
+```bash
+pm2 startup                              # prints one sudo command; run it
+pm2 save
+```
+
+Useful afterwards: `pm2 status`, `pm2 logs notepad`, `pm2 reload notepad --update-env` (after editing
+`shared/.env`), `pm2 stop notepad`. To roll back, point the `current` symlink at a previous release
+directory and run the `pm2 startOrReload` command again. Old release directories can simply be deleted.
+
+How the pieces fit: `ecosystem.config.cjs` (shipped in every bundle) runs `server/dist/index.js`
+from `<NOTEPAD_HOME>/current` as a single fork-mode process, passes
+`--env-file-if-exists=<NOTEPAD_HOME>/shared/.env` to Node, stores the SQLite database in
+`<NOTEPAD_HOME>/shared/data` and logs in `<NOTEPAD_HOME>/shared/logs`. Keep it at one instance:
+live-collaboration rooms are held in memory and SQLite has one writer. `NOTEPAD_HOME` defaults to
+two directories above the ecosystem file, so it is only needed if you deviate from the layout above.
+
+**Reverse proxy example (nginx)**
+
+```nginx
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+
+server {
+    listen 443 ssl http2;
+    server_name notes.example.com;
+    # ssl_certificate / ssl_certificate_key ...
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;       # WebSocket on /ws
+        proxy_set_header Connection $connection_upgrade;
+        proxy_read_timeout 90s;                       # long-polls hold up to 25 s
+        proxy_buffering off;
+    }
+}
+```
 
 ### Environment
 
@@ -48,6 +142,7 @@ NOTEPAD_CREATE_SECRET=dev npm run dev     # Express on :3000, Vite on :5173 (pro
 npm run typecheck
 npm test                                   # Vitest: shared, server, client (client tests run a real server in-process)
 npm run build && npm run e2e               # Playwright: two browser contexts collaborate, pair by code, third context with blocked WebSockets
+npm run bundle                             # release tarball for the pm2 deployment path
 ```
 
 The repo is an npm workspace: `shared/` (crypto, pairing codes, protocol types), `server/`, `client/`.
