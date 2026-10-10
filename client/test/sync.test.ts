@@ -1,7 +1,7 @@
-import { IndexeddbPersistence } from 'y-indexeddb';
 import * as Y from 'yjs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createFile, getFileText, initVault, listFiles } from '../src/core/files.js';
+import { LocalDocPersistence } from '../src/core/localDoc.js';
 import { docDbName } from '../src/core/syncStore.js';
 import { FailingTransport, createVault, openSession, sleep, startServer, waitFor, type TestServer } from './helpers.js';
 
@@ -81,7 +81,7 @@ describe('offline and recovery', () => {
     other.destroy();
   });
 
-  it('pushes edits that were persisted by y-indexeddb but missing from the outbox (safety net)', async () => {
+  it('pushes edits that were persisted locally but missing from the outbox (safety net)', async () => {
     const vault = await createVault(server);
     const a = openSession(server, vault, { ns: 'safety-' });
     await a.ready;
@@ -89,14 +89,13 @@ describe('offline and recovery', () => {
     await waitFor(() => a.status.get().state === 'synced', 5000, 'A synced');
     a.destroy();
 
-    // Edit the local doc through y-indexeddb alone, bypassing the provider's outbox entirely.
+    // Edit the local doc through the local persistence alone, bypassing the provider's outbox entirely.
     const doc = new Y.Doc();
-    const idb = new IndexeddbPersistence(docDbName('safety-', vault.vaultId), doc);
+    const idb = new LocalDocPersistence(docDbName('safety-', vault.vaultId), doc);
     await idb.whenSynced;
     (doc.getMap('files').get(fileId) as Y.Map<unknown>).get('text');
     getFileText(doc, fileId)!.insert(0, 'ghost edit ');
-    await sleep(50);
-    idb.destroy();
+    await idb.destroy();
     doc.destroy();
 
     const a2 = openSession(server, vault, { ns: 'safety-' });

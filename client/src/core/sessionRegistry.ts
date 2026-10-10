@@ -35,7 +35,7 @@ export function releaseSession(vaultId: string): void {
   e.dropTimer = setTimeout(() => {
     if (e.refs === 0) {
       entries.delete(vaultId);
-      e.session.destroy();
+      void e.session.destroy();
     }
   }, DROP_DELAY_MS);
 }
@@ -51,4 +51,16 @@ export async function evictSession(vaultId: string): Promise<VaultSession | null
   if (e.dropTimer) clearTimeout(e.dropTimer);
   entries.delete(vaultId);
   return e.session;
+}
+
+/** Destroy every open session and wait until their local writes are flushed. */
+export async function closeAllSessions(): Promise<void> {
+  const all = [...entries.values()];
+  entries.clear();
+  await Promise.all(
+    all.map((e) => {
+      if (e.dropTimer) clearTimeout(e.dropTimer);
+      return e.session.destroy();
+    }),
+  );
 }

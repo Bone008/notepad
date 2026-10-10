@@ -1,8 +1,8 @@
 import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-indexeddb';
 import { Awareness, removeAwarenessStates } from 'y-protocols/awareness';
 import { deriveVaultKeys, fromBase64Url, type VaultKeys } from '@notepad/shared';
 import { HttpTransport } from './httpTransport.js';
+import { LocalDocPersistence } from './localDoc.js';
 import { EncryptedProvider, type SessionStatus } from './provider.js';
 import { Observable } from './store.js';
 import { SyncStore, deleteDatabase, docDbName, syncDbName } from './syncStore.js';
@@ -84,7 +84,7 @@ export class VaultSession {
   readonly vaultId: string;
   readonly doc = new Y.Doc({ gc: true });
   readonly awareness = new Awareness(this.doc);
-  readonly idb: IndexeddbPersistence;
+  readonly idb: LocalDocPersistence;
   readonly ready: Promise<void>;
   readonly status = new Observable<SessionStatus>({ state: 'offline', transport: null, pending: 0, peers: 1, quotaExceeded: false });
   keys!: VaultKeys;
@@ -100,7 +100,7 @@ export class VaultSession {
     this.vaultId = opts.vaultId;
     this.identity = opts.identity ?? browserIdentity();
     const ns = opts.storageNamespace ?? '';
-    this.idb = new IndexeddbPersistence(docDbName(ns, opts.vaultId), this.doc);
+    this.idb = new LocalDocPersistence(docDbName(ns, opts.vaultId), this.doc);
     this.store = new SyncStore(syncDbName(ns, opts.vaultId));
     this.ready = this.init();
   }
@@ -183,20 +183,22 @@ export class VaultSession {
     removeAwarenessStates(this.awareness, [this.doc.clientID], 'local');
   }
 
-  destroy(): void {
-    if (this.destroyed) return;
+  /** Resolves once pending local writes are flushed and the database is closed. */
+  destroy(): Promise<void> {
+    if (this.destroyed) return this.idb.destroy();
     this.destroyed = true;
     this.connection?.stop();
     this.provider?.destroy();
     this.awareness.destroy();
-    this.idb.destroy();
+    const closed = this.idb.destroy();
     this.doc.destroy();
+    return closed;
   }
 
   /** Remove every local trace of this vault (leave vault). */
   async wipeLocal(): Promise<void> {
     const ns = this.opts.storageNamespace ?? '';
-    this.destroy();
+    await this.destroy();
     await deleteDatabase(docDbName(ns, this.vaultId));
     await deleteDatabase(syncDbName(ns, this.vaultId));
   }

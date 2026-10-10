@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import { openString, sealString } from '../core/localLock.js';
 
 export interface VaultRecord {
   id: string;
@@ -33,6 +34,28 @@ function randomName(): string {
   return `${pick(adjectives)} ${pick(nouns)}`;
 }
 
+let pendingWrite: Promise<void> = Promise.resolve();
+
+/** localStorage, encrypted when local access control is on. Writes are serialized because sealing is async. */
+const sealedLocalStorage: StateStorage = {
+  getItem: async (name) => {
+    const raw = localStorage.getItem(name);
+    return raw === null ? null : openString(`state|${name}`, raw);
+  },
+  setItem: (name, value) => {
+    pendingWrite = pendingWrite
+      .then(async () => localStorage.setItem(name, await sealString(`state|${name}`, value)))
+      .catch((e) => console.error('[notepad] saving settings failed', e));
+    return pendingWrite;
+  },
+  removeItem: (name) => localStorage.removeItem(name),
+};
+
+/** Resolves once the latest state has been written to localStorage. */
+export function persistedVaultList(): Promise<void> {
+  return pendingWrite;
+}
+
 export const useVaultList = create<VaultListState>()(
   persist(
     (set) => ({
@@ -57,7 +80,12 @@ export const useVaultList = create<VaultListState>()(
         })),
       setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
     }),
-    { name: 'notepad' },
+    {
+      name: 'notepad',
+      storage: createJSONStorage(() => sealedLocalStorage),
+      // Hydrated explicitly at startup, after the local password (if any) has been entered.
+      skipHydration: true,
+    },
   ),
 );
 

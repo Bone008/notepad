@@ -7,6 +7,8 @@ server only ever stores ciphertext.
 - **End-to-end encrypted sync**: every change is a Yjs CRDT update encrypted on the device (AES-GCM) before it reaches the server. The server stores an opaque, append-only log per vault and never holds a key.
 - **Live collaboration** with remote cursors and an online-device count. A refreshed tab keeps its identity, so it never shows up twice.
 - **Add a device without passwords**: an existing device shows a one-time 12-character code (`K7QX-M2PA-9ZRT`), the new device types it. A QR code and a share link are offered too.
+- **File links**: Share → "Link to this file" copies a key-less URL that opens the file on devices that already joined the vault; elsewhere it shows "vault not found".
+- **Local access control** (optional, Settings): everything stored in the browser (vault keys, documents, settings) is encrypted with a random data key that is wrapped by a password (PBKDF2-SHA256, 600k iterations). The unlocked key is held in memory only and never written to storage, so every page load (new tab, reload, restored tab) asks for the password. A forgotten password cannot be recovered.
 - **Offline first**: installable PWA; the document lives in IndexedDB and edits made offline are queued and pushed when the connection returns.
 - **WebSocket-free mode**: WebSocket first, automatic fallback to HTTP long-polling, plus a setting that forces HTTP.
 - **Stack**: TypeScript, React + Vite + CodeMirror 6 on the client, Express 5 + built-in `node:sqlite` on the server, one Docker image.

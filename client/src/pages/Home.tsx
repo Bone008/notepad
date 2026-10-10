@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CreateVaultDialog } from '../components/CreateVaultDialog.js';
+import { LockButton } from '../components/LockButton.js';
 import { Modal } from '../components/Modal.js';
 import { PairingCodeInput } from '../components/PairingCodeInput.js';
 import { navigate, vaultPath } from '../router.js';
@@ -13,9 +14,12 @@ export function Home() {
     <div className="page home">
       <header className="home-head">
         <h1>Notepad</h1>
-        <button className="icon-btn" title="Settings" aria-label="Settings" onClick={() => navigate('/settings')}>
-          ⚙
-        </button>
+        <div className="head-actions">
+          <LockButton />
+          <button className="icon-btn" title="Settings" aria-label="Settings" onClick={() => navigate('/settings')}>
+            ⚙
+          </button>
+        </div>
       </header>
 
       <div className="home-actions">

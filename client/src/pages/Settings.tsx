@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LocalAccessSettings } from '../components/LocalAccessSettings.js';
 import { deleteDatabase, docDbName, syncDbName } from '../core/syncStore.js';
 import { evictSession, peekSession } from '../core/sessionRegistry.js';
 import { navigate } from '../router.js';
@@ -40,18 +41,6 @@ export function Settings() {
       </header>
 
       <section className="stack">
-        <h2>Connection</h2>
-        <label className="toggle">
-          <input type="checkbox" checked={settings.forceHttp} onChange={(e) => toggleHttp(e.target.checked)} data-testid="force-http" />
-          <span>
-            <strong>WebSocket-free mode</strong>
-            <br />
-            <small className="muted">Always use HTTP long-polling. Turn on if your network blocks WebSockets. Otherwise Notepad falls back automatically.</small>
-          </span>
-        </label>
-      </section>
-
-      <section className="stack">
         <h2>This device</h2>
         <label className="field">
           <span>Name shown to collaborators</span>
@@ -73,10 +62,20 @@ export function Settings() {
         </div>
       </section>
 
+      <LocalAccessSettings />
+
       <section className="stack">
         <h2>Server</h2>
+        <label className="toggle">
+          <input type="checkbox" checked={settings.forceHttp} onChange={(e) => toggleHttp(e.target.checked)} data-testid="force-http" />
+          <span>
+            <strong>WebSocket-free mode</strong>
+            <br />
+            <small className="muted">Always use HTTP long-polling. Turn on if your network blocks WebSockets. Otherwise Notepad falls back automatically.</small>
+          </span>
+        </label>
         <label className="field">
-          <span>Create secret</span>
+          <span>Secret needed for vault creation</span>
           <input type="password" value={secretDraft} onChange={(e) => setSecretDraft(e.target.value)} onBlur={() => setSettings({ createSecret: secretDraft || null })} />
           <small className="muted">Needed only to create new vaults on this server.</small>
         </label>

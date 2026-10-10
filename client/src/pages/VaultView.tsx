@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { deriveVaultKeys, fromBase64Url } from '@notepad/shared';
 import { Editor } from '../components/Editor.js';
 import { FileSidebar } from '../components/FileSidebar.js';
+import { LockButton } from '../components/LockButton.js';
 import { Presence } from '../components/Presence.js';
 import { ShareMenu } from '../components/ShareMenu.js';
 import { StatusIndicator } from '../components/StatusIndicator.js';
@@ -14,10 +15,30 @@ import { useVault, useVaultList } from '../store/vaultList.js';
 
 export function VaultView({ vaultId, fileId }: { vaultId: string; fileId: string | null }) {
   const record = useVault(vaultId);
-  useEffect(() => {
-    if (!record) navigate('/', true);
-  }, [record]);
-  if (!record) return null;
+  if (!record) {
+    return (
+      <div className="page">
+        <header className="home-head">
+          <button className="icon-btn" onClick={() => navigate('/')} aria-label="Back to vaults">
+            ←
+          </button>
+          <h1>Vault not found</h1>
+        </header>
+        <div className="stack" data-testid="vault-missing">
+          <p className="error">This vault is not on this device.</p>
+          <p className="muted">
+            Links to a file only work on devices that have already joined the vault. To add this device, use a pairing code, QR code or join link
+            from a device that has the vault (Share → Add a device).
+          </p>
+          <div>
+            <button className="primary" onClick={() => navigate('/')}>
+              Go to my vaults
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return <VaultInner vaultId={vaultId} keyB64={record.keyB64} fileId={fileId} />;
 }
 
@@ -137,6 +158,7 @@ function VaultInner({ vaultId, keyB64, fileId }: { vaultId: string; keyB64: stri
             View
           </button>
         </div>
+        <LockButton />
       </header>
       <div className="vault-body">
         {sidebar && doc && (
@@ -152,7 +174,16 @@ function VaultInner({ vaultId, keyB64, fileId }: { vaultId: string; keyB64: stri
         )}
         <main className="vault-main">{body}</main>
       </div>
-      {share && <ShareMenu vaultId={vaultId} keyB64={keyB64} vaultName={vaultName} onClose={() => setShare(false)} />}
+      {share && (
+        <ShareMenu
+          vaultId={vaultId}
+          keyB64={keyB64}
+          vaultName={vaultName}
+          fileId={activeId}
+          fileName={activeFile?.name ?? null}
+          onClose={() => setShare(false)}
+        />
+      )}
     </div>
   );
 }

@@ -37,7 +37,7 @@ export interface ProviderOptions {
   keys: VaultKeys;
   store: SyncStore;
   sender: Sender;
-  /** Origins whose updates are NOT local edits (e.g. the y-indexeddb instance). */
+  /** Origins whose updates are NOT local edits (e.g. the local IndexedDB persistence). */
   ignoredOrigins: unknown[];
   /** Optional externally owned status observable (the session creates one before the provider exists). */
   status?: Observable<SessionStatus>;
@@ -135,7 +135,7 @@ export class EncryptedProvider {
     return this.outbox.length;
   }
 
-  /** Load persisted sync state and start tracking local edits. Call after y-indexeddb has loaded. */
+  /** Load persisted sync state and start tracking local edits. Call after the local document has loaded. */
   async init(): Promise<void> {
     const st = await this.store.load();
     this.lastSeq = st.lastSeq;
@@ -143,7 +143,7 @@ export class EncryptedProvider {
     this.outbox = st.outbox;
 
     // Safety net: anything in the doc that the server did not have at the last clean sync point.
-    // Covers edits persisted by y-indexeddb but lost from the outbox (two separate IndexedDB writes).
+    // Covers edits persisted locally but lost from the outbox (two separate IndexedDB writes).
     if (this.syncedSV) {
       const diff = Y.encodeStateAsUpdate(this.doc, this.syncedSV);
       if (!isEmptyUpdate(diff)) {
